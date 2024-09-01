@@ -8,7 +8,9 @@ from sae_lens import SAE
 import torch
 from .testing import get_arc_easy_accuracy
 from .dataset import get_tokenized_arc_easy_for_testing
+from .dataset_translation import get_tokenized_testing_translation_dataset
 from functools import partial
+import evaluate
 
 def get_lr_coefs(batch_size, tokenized_dataset, sae, model):
     sae.eval()  # prevents error if we're expecting a dead neuron mask for who grads
@@ -179,3 +181,42 @@ def get_arc_easy_accuracy_with_steering_multiple_hooks(model, hook_points, sae_c
             correct += (np.array(logit_diff) > 0).sum()
             sum_logit_diff += (np.array(logit_diff)).sum()
     return correct / len(tokenized_dataset), sum_logit_diff / len(tokenized_dataset)
+
+def get_translation_bleu_with_steering_multiple_hooks(model, hook_points, sae_context_size,
+                                                      batch_size, dataset_split, steering_vectors, steering_strengths):
+
+    steering_vectors = [steering_vector.to(model.cfg.device) for steering_vector in steering_vectors]
+    
+    tokenized_dataset = get_tokenized_testing_translation_dataset(model=model, sae_context_size=sae_context_size,
+                                                                  batch_size=batch_size, dataset_split=dataset_split,
+                                                                  len_of_dataset=100)
+    dataloader = DataLoader(tokenized_dataset, batch_size=batch_size, shuffle=False)
+
+    bleu = evaluate.load("bleu")
+
+    bleu_scores = []
+    examples = []
+    with torch.no_grad():
+        for iter, batch in tqdm(enumerate(dataloader)):
+            batch_tokens = batch["ru_tokens"]
+
+            steering_hooks = []
+            for hook_point, steering_vector, steering_strength in zip(hook_points, steering_vectors, steering_strengths):
+                steering_hook = partial(
+                    steering,
+                    steering_vectors=[steering_vector],
+                    steering_strengths=[steering_strength],
+                    max_acts=[1.],
+                    pos_to_intervene=[-1 for i in range(batch_tokens.shape[0])] # padding on the left
+                )
+                steering_hooks.append((hook_point, steering_hook))
+
+            with model.hooks(fwd_hooks=steering_hooks):
+                generated = model.generate(batch_tokens, max_new_tokens=20)
+                for i in range(batch_tokens.shape[0]):
+                    continuation = model.tokenizer.decode(generated[i][batch_tokens[i].shape[0]:])
+                    examples.append(model.tokenizer.decode(generated[i]))
+                    bleu_scores.append(bleu.compute(predictions=[continuation],
+                                                    references=[batch["en"]])["bleu"])
+
+    return examples, bleu_scores
