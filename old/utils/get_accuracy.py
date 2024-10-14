@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from sae_lens import SAE
 
-def get_accuracies_per_layer(model, tokenized_dataset, type_of_activation="res", batch_size=8, device="cuda")
+def get_accuracies_per_layer(model, tokenized_dataset, type_of_activation="res", batch_size=8, device="cuda"):
     accuracies = []
     num_of_features = []
     for layer in range(0, 25):

@@ -78,14 +78,6 @@ def get_formatted_truthful_qa_for_probing(batch_size=8, select_items=500):
 
     return probing_dataset
 
-def tokenize_probing(examples, column_name, tokenizer, max_length):
-    tokenizer.padding_side = "right"
-    text = examples[column_name]
-    tokens = tokenizer(text, return_tensors="np", padding="longest", max_length=max_length)["input_ids"]
-    len_of_input = np.argmax(tokens == tokenizer.pad_token_id, axis=1)
-    assert (tokens[len_of_input == 0] != tokenizer.pad_token_id).all(), (len_of_input, tokens)
-    len_of_input[len_of_input == 0] = tokens.shape[1]
-    return {"tokens": tokens, "len_of_input": len_of_input}
 
 def get_tokenized_truthful_qa_for_probing(model, sae_context_size, batch_size=8, select_items=500):
     probing_dataset = get_formatted_truthful_qa_for_probing(batch_size, select_items)
