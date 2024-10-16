@@ -24,7 +24,7 @@ class TruthfulQA:
                     have_incorrect_example = True
         return examples_formatted
 
-    def get_dataset_for_probing(self, tokenizer, batch_size, num_select_items, max_length, **kwargs):
+    def get_dataset_for_probing(self, tokenizer, batch_size, subset, subset_len, random_seed, max_length, probing_split=True, **kwargs):
         def tokenize(examples, column_name, tokenizer, max_length):
             tokenizer.padding_side = "right"
             text = examples[column_name]
@@ -39,10 +39,13 @@ class TruthfulQA:
             split="validation",
             streaming=False,
         )
+        dataset = dataset.train_test_split(test_size=0.5, seed=42)["test" if probing_split else "train"]
         probing_dataset = dataset.map(TruthfulQA.format_examples_probing, batched=True,
                         batch_size=batch_size, remove_columns=dataset.column_names)
-
-        probing_dataset = probing_dataset.shuffle(seed=42).select(range(num_select_items))
+        if subset:
+            probing_dataset = probing_dataset.shuffle(seed=random_seed).select(range(subset_len))
+        else:
+            probing_dataset = probing_dataset.shuffle(seed=random_seed)
         tokenized_dataset = probing_dataset.map(
             partial(tokenize,
             column_name = "sent",
@@ -72,7 +75,7 @@ class TruthfulQA:
             examples_formatted["num_labels"].append(len(example_choices["choices"]))
         return examples_formatted
         
-    def get_dataset_for_testing(self, tokenizer, batch_size, max_length, **kwargs):
+    def get_dataset_for_testing(self, tokenizer, batch_size, max_length, subset, subset_len, random_seed, testing_split=True, **kwargs):
         def tokenize(examples, column_name, tokenizer, max_length):
             tokenizer.padding_side = "left"
             text = examples[column_name]
@@ -83,7 +86,12 @@ class TruthfulQA:
             split="validation",
             streaming=False,
         )
+        dataset = dataset.train_test_split(test_size=0.5, seed=42)["train" if testing_split else "test"]
         formatted_dataset = dataset.map(self.format_examples_testing, batched=True, batch_size=1)
+        if subset:
+            formatted_dataset = formatted_dataset.shuffle(seed=random_seed).select(range(subset_len))
+        else:
+            formatted_dataset = formatted_dataset.shuffle(seed=random_seed)
         tokenized_dataset = formatted_dataset.map(
             partial(tokenize,
             column_name = "formatted_question",
@@ -98,8 +106,8 @@ class TruthfulQA:
     
     def get_tokenized_dataset(self, **kwargs):
         if self.type == "testing":
-            assert "tokenizer" in kwargs and "batch_size" in kwargs and "max_length" in kwargs
+            assert "tokenizer" in kwargs and "batch_size" in kwargs and "max_length" in kwargs and "subset" in kwargs and "subset_len" in kwargs and "random_seed" in kwargs
             return self.get_dataset_for_testing(**kwargs)
         if self.type == "probing":
-            assert "tokenizer" in kwargs and "batch_size" in kwargs and "max_length" in kwargs and "num_select_items" in kwargs
+            assert "tokenizer" in kwargs and "batch_size" in kwargs and "max_length" in kwargs and "subset" in kwargs and "subset_len" in kwargs and "random_seed" in kwargs
             return self.get_dataset_for_probing(**kwargs)
