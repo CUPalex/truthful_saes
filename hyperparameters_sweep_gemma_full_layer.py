@@ -19,20 +19,6 @@ from models.gemma_2 import Gemma
 
 hooked_model = Gemma(model, tokenizer)
 
-import json
-import numpy as np
-with open("cache/accuracies_sorted_gemma.json", "r") as file:
-    accuracies_sorted = json.load(file)
-with open("cache/steering_directions_gemma_full_layer.json", "r") as file:
-    steering_directions_json = json.load(file)
-steering_directions = {}
-for item in steering_directions_json:
-    steering_directions[eval(item)] = np.array(steering_directions_json[item])
-with open("cache/stds_gemma_full_layer.json", "r") as file:
-    stds_json = json.load(file)
-stds = {}
-for item in stds_json:
-    stds[eval(item)] = stds_json[item]
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -86,5 +72,7 @@ for k in ks:
             accs_by_k_alpha[(k, alpha)].append(correct / len(tokenized_dataset))
             logit_diffs_by_k_alpha[(k, alpha)].append(sum_logit_diff / len(tokenized_dataset))
             print(k, alpha, dataset_i, accs_by_k_alpha[(k, alpha)])
-with open("cache/accs_by_k_alpha_gemma_full_layer_on_probing_dataset.json", "w") as file:
+
+import json
+with open("cache/accs_by_k_alpha_gemma_full_layer.json", "w") as file:
     json.dump({str(k): str(a) for k, a in accs_by_k_alpha.items()}, file)
